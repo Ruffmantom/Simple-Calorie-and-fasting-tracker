@@ -1,0 +1,20 @@
+﻿{
+  "name": "Simple Food Tracker",
+  "short_name": "Food Tracker",
+  "description": "A simple offline food, calorie, and fasting tracker.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

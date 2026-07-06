@@ -1,0 +1,279 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#09090b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="description" content="A simple offline food, calorie, and fasting tracker.">
+    <title>Simple Food Tracker</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icon.svg">
+    <link rel="stylesheet" href="styles/main.css">
+    <script defer src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script defer src="scripts/main.js"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <header class="app-header">
+            <div>
+                <p class="eyebrow" id="todayLabel">Today</p>
+                <h1>Simple Food Tracker</h1>
+            </div>
+            <button class="icon-button" id="settingsButton" type="button" aria-label="Open settings">
+                <i data-lucide="settings" aria-hidden="true"></i>
+            </button>
+        </header>
+
+        <main class="app-main">
+            <section class="summary-grid" aria-labelledby="summaryTitle">
+                <div class="summary-card summary-card--primary">
+                    <div>
+                        <p class="section-kicker" id="summaryTitle">Calories today</p>
+                        <p class="summary-value"><span id="todayCalories">0</span><span>kcal</span></p>
+                    </div>
+                    <div class="summary-icon" aria-hidden="true">
+                        <i data-lucide="flame"></i>
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <p class="section-kicker">Protein</p>
+                    <p class="metric-value"><span id="todayProtein">0</span><span>g</span></p>
+                </div>
+
+                <div class="summary-card">
+                    <p class="section-kicker">Sugar</p>
+                    <p class="metric-value"><span id="todaySugar">0</span><span>g</span></p>
+                </div>
+
+                <div class="summary-card summary-card--wide">
+                    <p class="section-kicker">Total items logged</p>
+                    <p class="metric-value"><span id="todayItemCount">0</span><span>items</span></p>
+                </div>
+            </section>
+
+            <section class="chart-panel" aria-labelledby="calorieChartTitle">
+                <div class="section-header">
+                    <div>
+                        <p class="section-kicker">Weekly progress</p>
+                        <h2 id="calorieChartTitle">Calories</h2>
+                    </div>
+                    <i data-lucide="trending-up" aria-hidden="true"></i>
+                </div>
+                <canvas id="calorieLineChart" height="180" aria-label="Line chart of calories for the last seven days"></canvas>
+            </section>
+
+            <section class="chart-panel" aria-labelledby="categoryChartTitle">
+                <div class="section-header">
+                    <div>
+                        <p class="section-kicker">Weekly totals</p>
+                        <h2 id="categoryChartTitle">Categories</h2>
+                    </div>
+                    <i data-lucide="chart-no-axes-combined" aria-hidden="true"></i>
+                </div>
+                <canvas id="categoryBarChart" height="170" aria-label="Bar chart of calories, protein, and sugar for this week"></canvas>
+            </section>
+
+            <section class="chart-panel fasting-panel" aria-labelledby="fastingChartTitle">
+                <div class="section-header">
+                    <div>
+                        <p class="section-kicker">Fasting logs</p>
+                        <h2 id="fastingChartTitle">This week</h2>
+                    </div>
+                    <span class="count-badge" id="fastingLogCount">0 logs</span>
+                </div>
+                <canvas id="fastingBarChart" height="170" aria-label="Bar chart of fasting hours for the last seven days"></canvas>
+                <div class="fasting-stats" aria-label="Weekly fasting summary">
+                    <div>
+                        <p class="section-kicker">Hours</p>
+                        <strong><span id="weeklyFastingHours">0</span>h</strong>
+                    </div>
+                    <div>
+                        <p class="section-kicker">Goal</p>
+                        <strong><span id="fastingGoalDisplay">16</span>h</strong>
+                    </div>
+                </div>
+                <ul class="fasting-list" id="fastingList"></ul>
+                <div class="empty-state" id="fastingEmptyState">
+                    <i data-lucide="clock" aria-hidden="true"></i>
+                    <p>No fasting logs this week.</p>
+                </div>
+            </section>
+
+            <section class="food-section" aria-labelledby="foodListTitle">
+                <div class="section-header">
+                    <div>
+                        <p class="section-kicker">Today</p>
+                        <h2 id="foodListTitle">Recent foods</h2>
+                    </div>
+                    <span class="count-badge" id="foodListCount">0 items</span>
+                </div>
+                <ul class="food-list" id="foodList"></ul>
+                <div class="empty-state" id="emptyState">
+                    <i data-lucide="notebook-pen" aria-hidden="true"></i>
+                    <p>No foods logged today.</p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="app-footer">
+            <div class="footer-inner">
+                <div>
+                    <p class="footer-label">Today</p>
+                    <p class="footer-total"><span id="footerCalories">0</span> kcal</p>
+                </div>
+                <div class="footer-actions">
+                    <button class="fab-button fab-button--secondary" id="openAddFastButton" type="button" aria-label="Add fasting log">
+                        <i data-lucide="clock" aria-hidden="true"></i>
+                    </button>
+                    <button class="fab-button" id="openAddFoodButton" type="button" aria-label="Add food">
+                        <i data-lucide="plus" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div class="modal" id="addFoodModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="addFoodTitle">
+        <div class="modal-backdrop" data-close-modal="addFoodModal"></div>
+        <section class="sheet" role="document">
+            <div class="sheet-header">
+                <div>
+                    <p class="section-kicker">Log food</p>
+                    <h2 id="addFoodTitle">Add new item</h2>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close add food" data-close-modal="addFoodModal">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <form class="food-form" id="foodForm">
+                <label class="field">
+                    <span>Food name</span>
+                    <input id="foodName" name="foodName" type="text" autocomplete="off" required placeholder="Greek yogurt">
+                </label>
+
+                <label class="field">
+                    <span>Calories</span>
+                    <div class="unit-field">
+                        <input id="calorieInput" name="calories" type="number" min="0" step="1" inputmode="numeric" required placeholder="180">
+                        <span>kcal</span>
+                    </div>
+                </label>
+
+                <div class="form-row">
+                    <label class="field">
+                        <span>Protein</span>
+                        <div class="split-field">
+                            <input id="proteinInput" name="protein" type="number" min="0" step="0.1" inputmode="decimal" required placeholder="18">
+                            <select id="proteinUnit" name="proteinUnit" aria-label="Protein unit">
+                                <option value="g">g</option>
+                                <option value="mg">mg</option>
+                                <option value="oz">oz</option>
+                            </select>
+                        </div>
+                    </label>
+
+                    <label class="field">
+                        <span>Sugar</span>
+                        <div class="split-field">
+                            <input id="sugarInput" name="sugar" type="number" min="0" step="0.1" inputmode="decimal" required placeholder="6">
+                            <select id="sugarUnit" name="sugarUnit" aria-label="Sugar unit">
+                                <option value="g">g</option>
+                                <option value="mg">mg</option>
+                                <option value="oz">oz</option>
+                            </select>
+                        </div>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button class="secondary-button" type="button" data-close-modal="addFoodModal">Cancel</button>
+                    <button class="primary-button" type="submit">Save food</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="modal" id="addFastModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="addFastTitle">
+        <div class="modal-backdrop" data-close-modal="addFastModal"></div>
+        <section class="sheet" role="document">
+            <div class="sheet-header">
+                <div>
+                    <p class="section-kicker">Log fast</p>
+                    <h2 id="addFastTitle">Add fasting log</h2>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close fasting log" data-close-modal="addFastModal">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <form class="food-form" id="fastingForm">
+                <label class="field">
+                    <span>Started</span>
+                    <input id="fastStart" name="fastStart" type="datetime-local" required>
+                </label>
+
+                <label class="field">
+                    <span>Ended</span>
+                    <input id="fastEnd" name="fastEnd" type="datetime-local" required>
+                </label>
+
+                <div class="form-actions">
+                    <button class="secondary-button" type="button" data-close-modal="addFastModal">Cancel</button>
+                    <button class="primary-button" type="submit">Save fast</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settingsTitle">
+        <div class="modal-backdrop" data-close-modal="settingsModal"></div>
+        <section class="sheet" role="document">
+            <div class="sheet-header">
+                <div>
+                    <p class="section-kicker">App</p>
+                    <h2 id="settingsTitle">Settings</h2>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close settings" data-close-modal="settingsModal">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <div class="settings-list">
+                <form class="settings-card" id="fastingGoalForm">
+                    <label class="field">
+                        <span>Fasting goal</span>
+                        <div class="unit-field">
+                            <input id="fastingGoalInput" name="fastingGoalHours" type="number" min="1" max="72" step="0.5" inputmode="decimal" required>
+                            <span>hours</span>
+                        </div>
+                    </label>
+                    <button class="primary-button" type="submit">Save goal</button>
+                </form>
+
+                <div class="settings-row">
+                    <div>
+                        <p>Version</p>
+                        <span id="versionNumber">1.1.0</span>
+                    </div>
+                    <i data-lucide="badge-check" aria-hidden="true"></i>
+                </div>
+
+                <button class="danger-row" id="clearDataButton" type="button">
+                    <span>
+                        <strong>Clear data</strong>
+                        <small>Remove saved foods, fasting logs, and reset the goal.</small>
+                    </span>
+                    <i data-lucide="trash-2" aria-hidden="true"></i>
+                </button>
+            </div>
+        </section>
+    </div>
+</body>
+</html>
+

@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "simple-food-tracker-v2";
+﻿const CACHE_NAME = "simple-food-tracker-v8";
 const APP_SHELL = [
     "./",
     "./index.html",

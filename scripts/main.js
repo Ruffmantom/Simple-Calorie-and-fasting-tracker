@@ -1,9 +1,10 @@
-﻿const APP_VERSION = "1.1.0";
+﻿const APP_VERSION = "1.2.3";
 const STORAGE_KEY = "simple-food-tracker.entries.v1";
 const FASTING_STORAGE_KEY = "simple-food-tracker.fasts.v1";
 const SETTINGS_STORAGE_KEY = "simple-food-tracker.settings.v1";
 const DEFAULT_SETTINGS = {
     fastingGoalHours: 16,
+    calorieGoalCalories: 0,
 };
 const UNIT_TO_GRAMS = {
     g: 1,
@@ -55,9 +56,18 @@ function cacheElements() {
     elements.openAddFastButton = document.querySelector("#openAddFastButton");
     elements.settingsButton = document.querySelector("#settingsButton");
     elements.foodForm = document.querySelector("#foodForm");
+    elements.foodName = document.querySelector("#foodName");
+    elements.foodSuggestionList = document.querySelector("#foodSuggestionList");
+    elements.calorieInput = document.querySelector("#calorieInput");
+    elements.proteinInput = document.querySelector("#proteinInput");
+    elements.proteinUnit = document.querySelector("#proteinUnit");
+    elements.sugarInput = document.querySelector("#sugarInput");
+    elements.sugarUnit = document.querySelector("#sugarUnit");
     elements.fastingForm = document.querySelector("#fastingForm");
     elements.fastingGoalForm = document.querySelector("#fastingGoalForm");
     elements.fastingGoalInput = document.querySelector("#fastingGoalInput");
+    elements.calorieGoalForm = document.querySelector("#calorieGoalForm");
+    elements.calorieGoalInput = document.querySelector("#calorieGoalInput");
     elements.clearDataButton = document.querySelector("#clearDataButton");
     elements.versionNumber = document.querySelector("#versionNumber");
     elements.calorieLineChart = document.querySelector("#calorieLineChart");
@@ -71,18 +81,28 @@ function cacheElements() {
 }
 
 function bindEvents() {
-    elements.openAddFoodButton.addEventListener("click", () => openModal("addFoodModal"));
+    elements.openAddFoodButton.addEventListener("click", () => {
+        hideFoodSuggestions();
+        openModal("addFoodModal");
+    });
     elements.openAddFastButton.addEventListener("click", () => {
         populateFastingDefaults();
         openModal("addFastModal");
     });
     elements.settingsButton.addEventListener("click", () => openModal("settingsModal"));
     elements.foodForm.addEventListener("submit", handleFoodSubmit);
+    elements.foodName.addEventListener("input", updateFoodSuggestions);
+    elements.foodName.addEventListener("focus", updateFoodSuggestions);
+    elements.foodSuggestionList.addEventListener("pointerdown", handleFoodSuggestionPointerDown);
     elements.fastingForm.addEventListener("submit", handleFastingSubmit);
     elements.fastingGoalForm.addEventListener("submit", handleFastingGoalSubmit);
+    elements.calorieGoalForm.addEventListener("submit", handleCalorieGoalSubmit);
     elements.clearDataButton.addEventListener("click", clearAllData);
 
     document.addEventListener("click", (event) => {
+        if (!event.target.closest(".food-name-field")) {
+            hideFoodSuggestions();
+        }
         const closeTarget = event.target.closest("[data-close-modal]");
         if (closeTarget) {
             closeModal(closeTarget.dataset.closeModal);
@@ -102,6 +122,11 @@ function bindEvents() {
     });
 
     document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && elements.foodSuggestionList && !elements.foodSuggestionList.hidden) {
+            hideFoodSuggestions();
+            return;
+        }
+
         if (event.key === "Escape") {
             closeOpenModal();
         }
@@ -181,6 +206,15 @@ function handleFastingSubmit(event) {
     render();
 }
 
+function handleCalorieGoalSubmit(event) {
+    event.preventDefault();
+
+    const formData = new FormData(elements.calorieGoalForm);
+    state.settings.calorieGoalCalories = sanitizeCalorieGoal(formData.get("calorieGoalCalories"));
+    saveSettings();
+    render();
+}
+
 function handleFastingGoalSubmit(event) {
     event.preventDefault();
 
@@ -223,13 +257,15 @@ function deleteFast(fastId) {
 }
 
 function clearAllData() {
-    const hasCustomGoal = state.settings.fastingGoalHours !== DEFAULT_SETTINGS.fastingGoalHours;
+    const hasCustomGoal =
+        state.settings.fastingGoalHours !== DEFAULT_SETTINGS.fastingGoalHours ||
+        state.settings.calorieGoalCalories !== DEFAULT_SETTINGS.calorieGoalCalories;
     if (!state.entries.length && !state.fasts.length && !hasCustomGoal) {
         closeModal("settingsModal");
         return;
     }
 
-    const shouldClear = window.confirm("Clear saved foods, fasting logs, and reset the fasting goal?");
+    const shouldClear = window.confirm("Clear saved foods, fasting logs, and reset your goals?");
     if (!shouldClear) {
         return;
     }
@@ -264,6 +300,7 @@ function render() {
     elements.weeklyFastingHours.textContent = formatHours(weeklyFastHours);
     elements.fastingGoalDisplay.textContent = formatHours(state.settings.fastingGoalHours);
     elements.fastingGoalInput.value = formatHours(state.settings.fastingGoalHours);
+    elements.calorieGoalInput.value = formatCalorieGoalInput(state.settings.calorieGoalCalories);
     elements.fastingEmptyState.hidden = weeklyFasts.length > 0;
 
     elements.foodList.innerHTML = todayEntries
@@ -326,9 +363,100 @@ function renderFastingItem(fast) {
     `;
 }
 
+function updateFoodSuggestions() {
+    const suggestions = getRecentFoodSuggestions(elements.foodName.value);
+    if (!suggestions.length) {
+        hideFoodSuggestions();
+        return;
+    }
+
+    elements.foodSuggestionList.innerHTML = suggestions.map(renderFoodSuggestion).join("");
+    elements.foodSuggestionList.hidden = false;
+    elements.foodName.setAttribute("aria-expanded", "true");
+}
+
+function handleFoodSuggestionPointerDown(event) {
+    const button = event.target.closest("[data-food-suggestion-id]");
+    if (!button) {
+        return;
+    }
+
+    event.preventDefault();
+    const entry = state.entries.find((item) => item.id === button.dataset.foodSuggestionId);
+    if (!entry) {
+        return;
+    }
+
+    populateFoodFormFromEntry(entry);
+    hideFoodSuggestions();
+}
+
+function populateFoodFormFromEntry(entry) {
+    const protein = getMacroFormValue(entry, "protein");
+    const sugar = getMacroFormValue(entry, "sugar");
+
+    elements.foodName.value = entry.name;
+    elements.calorieInput.value = formatInputNumber(entry.calories);
+    elements.proteinInput.value = formatInputNumber(protein.amount);
+    elements.proteinUnit.value = protein.unit;
+    elements.sugarInput.value = formatInputNumber(sugar.amount);
+    elements.sugarUnit.value = sugar.unit;
+}
+
+function hideFoodSuggestions() {
+    if (!elements.foodSuggestionList || !elements.foodName) {
+        return;
+    }
+
+    elements.foodSuggestionList.hidden = true;
+    elements.foodSuggestionList.innerHTML = "";
+    elements.foodName.setAttribute("aria-expanded", "false");
+}
+
+function getRecentFoodSuggestions(query) {
+    const normalizedQuery = normalizeSearchText(query);
+    if (!normalizedQuery) {
+        return [];
+    }
+
+    const seenNames = new Set();
+    return state.entries
+        .slice()
+        .sort((a, b) => getEntryTimestamp(b) - getEntryTimestamp(a))
+        .filter((entry) => {
+            const normalizedName = normalizeSearchText(entry.name);
+            if (!normalizedName.includes(normalizedQuery) || seenNames.has(normalizedName)) {
+                return false;
+            }
+
+            seenNames.add(normalizedName);
+            return true;
+        })
+        .slice(0, 5);
+}
+
+function renderFoodSuggestion(entry) {
+    const protein = getMacroFormValue(entry, "protein");
+    const sugar = getMacroFormValue(entry, "sugar");
+    const safeName = escapeHtml(entry.name);
+
+    return `
+        <button class="food-suggestion-button" type="button" role="option" data-food-suggestion-id="${escapeHtml(entry.id)}">
+            <span class="food-suggestion-name">${safeName}</span>
+            <span class="food-suggestion-meta">
+                <span>${formatCalories(entry.calories)} kcal</span>
+                <span>${formatInputNumber(protein.amount)}${protein.unit} protein</span>
+                <span>${formatInputNumber(sugar.amount)}${sugar.unit} sugar</span>
+            </span>
+            <span class="food-suggestion-time">${escapeHtml(formatEntryLastLogged(entry))}</span>
+        </button>
+    `;
+}
+
 function drawCharts() {
     drawCalorieLineChart();
     drawCategoryBarChart();
+    drawFastingBarChart();
 }
 
 function drawCalorieLineChart() {
@@ -341,7 +469,8 @@ function drawCalorieLineChart() {
     const { ctx, width, height, colors } = chart;
     const dates = getLastSevenDateKeys();
     const values = dates.map((dateKey) => sumEntries(getEntriesForDate(dateKey)).calories);
-    const maxValue = Math.max(500, ...values);
+    const goal = state.settings.calorieGoalCalories;
+    const maxValue = Math.max(500, goal, ...values);
     const padding = { top: 16, right: 12, bottom: 28, left: 42 };
     const plotWidth = Math.max(1, width - padding.left - padding.right);
     const plotHeight = Math.max(1, height - padding.top - padding.bottom);
@@ -366,6 +495,22 @@ function drawCalorieLineChart() {
         ctx.fillStyle = colors.muted;
         ctx.textAlign = "right";
         ctx.fillText(formatCompactNumber(labelValue), padding.left - 8, y);
+    }
+
+    if (goal > 0) {
+        const goalY = baseline - (Math.min(goal, maxValue) / maxValue) * plotHeight;
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = colors.calories;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, goalY);
+        ctx.lineTo(width - padding.right, goalY);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.fillStyle = colors.calories;
+        ctx.textAlign = "right";
+        ctx.fillText("Goal", width - padding.right, Math.max(padding.top + 8, goalY - 9));
     }
 
     const points = values.map((value, index) => {
@@ -617,6 +762,7 @@ function getChartColors() {
         calories: styles.getPropertyValue("--calories").trim() || "#f97316",
         protein: styles.getPropertyValue("--protein").trim() || "#22c55e",
         sugar: styles.getPropertyValue("--sugar").trim() || "#38bdf8",
+        fasting: styles.getPropertyValue("--fasting").trim() || "#facc15",
     };
 }
 
@@ -659,6 +805,9 @@ function closeModal(id) {
     }
 
     modal.setAttribute("aria-hidden", "true");
+    if (id === "addFoodModal") {
+        hideFoodSuggestions();
+    }
     if (!document.querySelector('.modal[aria-hidden="false"]')) {
         document.body.classList.remove("modal-open");
     }
@@ -740,6 +889,20 @@ function getFastDurationHours(fast) {
     return (end.getTime() - start.getTime()) / 3600000;
 }
 
+function getMacroFormValue(entry, key) {
+    const macro = entry[key];
+    if (!macro || typeof macro !== "object") {
+        return { amount: 0, unit: "g" };
+    }
+
+    const unit = sanitizeUnit(macro.unit);
+    if (Number.isFinite(Number(macro.amount))) {
+        return { amount: Number(macro.amount), unit };
+    }
+
+    return { amount: getMacroGrams(entry, key), unit: "g" };
+}
+
 function getMacroGrams(entry, key) {
     const macro = entry[key];
     if (!macro || typeof macro !== "object") {
@@ -810,6 +973,7 @@ function loadSettings() {
         return {
             ...DEFAULT_SETTINGS,
             fastingGoalHours: sanitizeFastingGoal(parsed && parsed.fastingGoalHours),
+            calorieGoalCalories: sanitizeCalorieGoal(parsed && parsed.calorieGoalCalories),
         };
     } catch (error) {
         console.warn("Unable to load settings.", error);
@@ -833,6 +997,16 @@ function isValidEntry(entry) {
         typeof entry.date === "string" &&
         typeof entry.name === "string"
     );
+}
+
+function getEntryTimestamp(entry) {
+    const createdAt = new Date(entry.createdAt);
+    if (!Number.isNaN(createdAt.getTime())) {
+        return createdAt.getTime();
+    }
+
+    const loggedDate = dateFromKey(entry.date);
+    return Number.isNaN(loggedDate.getTime()) ? 0 : loggedDate.getTime();
 }
 
 function isValidFast(fast) {
@@ -902,6 +1076,11 @@ function formatShortDateTime(value) {
     }).format(date);
 }
 
+function formatEntryLastLogged(entry) {
+    const timestamp = getEntryTimestamp(entry);
+    return timestamp ? `Last logged ${formatShortDateTime(timestamp)}` : "Recent log";
+}
+
 function formatDateTimeInput(date) {
     const offsetDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
     return offsetDate.toISOString().slice(0, 16);
@@ -927,6 +1106,22 @@ function formatGrams(value) {
 function formatHours(value) {
     const number = Number(value) || 0;
     return String(Math.round(number * 10) / 10).replace(/\.0$/, "");
+}
+
+function formatInputNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        return "";
+    }
+
+    return String(Math.round(number * 1000) / 1000)
+        .replace(/\.0+$/, "")
+        .replace(/(\.\d*?)0+$/, "$1");
+}
+
+function formatCalorieGoalInput(value) {
+    const number = Number(value) || 0;
+    return number > 0 ? formatCalories(number) : "";
 }
 
 function formatCompactNumber(value) {
@@ -968,8 +1163,21 @@ function parseDateTimeLocal(value) {
     return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function normalizeSearchText(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
 function sanitizeUnit(unit) {
     return Object.prototype.hasOwnProperty.call(UNIT_TO_GRAMS, unit) ? unit : "g";
+}
+
+function sanitizeCalorieGoal(value) {
+    const parsed = Number.parseFloat(String(value));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        return DEFAULT_SETTINGS.calorieGoalCalories;
+    }
+
+    return Math.min(20000, Math.max(1, Math.round(parsed)));
 }
 
 function sanitizeFastingGoal(value) {

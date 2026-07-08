@@ -152,10 +152,13 @@
             </div>
 
             <form class="food-form" id="foodForm">
-                <label class="field">
-                    <span>Food name</span>
-                    <input id="foodName" name="foodName" type="text" autocomplete="off" required placeholder="Greek yogurt">
-                </label>
+                <div class="field food-name-field">
+                    <label for="foodName">Food name</label>
+                    <div class="food-search">
+                        <input id="foodName" name="foodName" type="text" autocomplete="off" required placeholder="Greek yogurt" aria-autocomplete="list" aria-controls="foodSuggestionList" aria-expanded="false">
+                        <div class="food-suggestions" id="foodSuggestionList" role="listbox" aria-label="Recent matching food logs" hidden></div>
+                    </div>
+                </div>
 
                 <label class="field">
                     <span>Calories</span>
@@ -245,6 +248,18 @@
             </div>
 
             <div class="settings-list">
+                <form class="settings-card" id="calorieGoalForm">
+                    <label class="field">
+                        <span>Daily calorie goal</span>
+                        <div class="unit-field">
+                            <input id="calorieGoalInput" name="calorieGoalCalories" type="number" min="1" max="20000" step="1" inputmode="numeric" placeholder="2000" aria-describedby="calorieGoalHelp">
+                            <span>kcal</span>
+                        </div>
+                    </label>
+                    <p class="settings-help" id="calorieGoalHelp">Estimate current intake by averaging 7-14 normal days of logged calories. A calorie deficit is maintenance calories minus your goal; for example, 2300 maintenance and a 1900 goal is a 400 kcal daily deficit.</p>
+                    <button class="primary-button" type="submit">Save calorie goal</button>
+                </form>
+
                 <form class="settings-card" id="fastingGoalForm">
                     <label class="field">
                         <span>Fasting goal</span>
@@ -259,7 +274,7 @@
                 <div class="settings-row">
                     <div>
                         <p>Version</p>
-                        <span id="versionNumber">1.1.0</span>
+                        <span id="versionNumber">1.2.3</span>
                     </div>
                     <i data-lucide="badge-check" aria-hidden="true"></i>
                 </div>
@@ -267,7 +282,7 @@
                 <button class="danger-row" id="clearDataButton" type="button">
                     <span>
                         <strong>Clear data</strong>
-                        <small>Remove saved foods, fasting logs, and reset the goal.</small>
+                        <small>Remove saved foods, fasting logs, and reset your goals.</small>
                     </span>
                     <i data-lucide="trash-2" aria-hidden="true"></i>
                 </button>

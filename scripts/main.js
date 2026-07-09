@@ -1,7 +1,8 @@
-﻿const APP_VERSION = "1.2.3";
+﻿const APP_VERSION = "1.3.0";
 const STORAGE_KEY = "simple-food-tracker.entries.v1";
 const FASTING_STORAGE_KEY = "simple-food-tracker.fasts.v1";
 const SETTINGS_STORAGE_KEY = "simple-food-tracker.settings.v1";
+const ACHIEVEMENT_STORAGE_KEY = "simple-food-tracker.achievements.v1";
 const DEFAULT_SETTINGS = {
     fastingGoalHours: 16,
     calorieGoalCalories: 0,
@@ -18,14 +19,86 @@ const WEEKLY_REFERENCES = {
     sugar: 350,
 };
 
+const ACHIEVEMENTS = [
+    {
+        id: "first-step",
+        title: "First Step",
+        message: "You logged your first food. A steady record starts here.",
+        icon: "utensils",
+        events: ["food"],
+        isUnlocked: () => state.entries.length >= 1,
+    },
+    {
+        id: "getting-the-hang-of-it",
+        title: "Getting the Hang of It",
+        message: "Three foods logged. Your daily picture is getting clearer.",
+        icon: "list-check",
+        events: ["food"],
+        isUnlocked: () => state.entries.length >= 3,
+    },
+    {
+        id: "first-fast",
+        title: "First Fast",
+        message: "Your first fasting log is saved.",
+        icon: "clock",
+        events: ["fast"],
+        isUnlocked: () => state.fasts.length >= 1,
+    },
+    {
+        id: "goal-setter",
+        title: "Goal Setter",
+        message: "You saved a goal. Clear targets make repeat choices easier.",
+        icon: "target",
+        events: ["calorie-goal", "fasting-goal"],
+        isUnlocked: (context) =>
+            (context.eventName === "calorie-goal" && state.settings.calorieGoalCalories > 0) ||
+            context.eventName === "fasting-goal",
+    },
+    {
+        id: "small-win",
+        title: "Small Win",
+        message: "Today is at or under your calorie goal with food logged.",
+        icon: "badge-check",
+        events: ["food", "calorie-goal"],
+        isUnlocked: hasSmallWin,
+    },
+    {
+        id: "fasting-goal-hit",
+        title: "Fasting Goal Hit",
+        message: "That fast met your goal. Strong follow-through.",
+        icon: "trophy",
+        events: ["fast", "fasting-goal"],
+        isUnlocked: hasFastingGoalHit,
+    },
+    {
+        id: "three-day-rhythm",
+        title: "Three-Day Rhythm",
+        message: "Food has been logged on three different days.",
+        icon: "calendar-days",
+        events: ["food"],
+        isUnlocked: () => new Set(state.entries.map((entry) => entry.date).filter(Boolean)).size >= 3,
+    },
+    {
+        id: "back-on-track",
+        title: "Back on Track",
+        message: "You logged again after a break. Picking back up counts.",
+        icon: "refresh-cw",
+        events: ["food"],
+        isUnlocked: (context) => hasFoodLoggedAfterGap(context.entry),
+    },
+];
+
 const state = {
     entries: loadEntries(),
     fasts: loadFasts(),
     settings: loadSettings(),
+    achievements: loadAchievements(),
 };
 
 const elements = {};
 let resizeTimer = 0;
+let achievementToastTimer = 0;
+const achievementToastQueue = [];
 
 window.addEventListener("DOMContentLoaded", init);
 
@@ -55,6 +128,8 @@ function cacheElements() {
     elements.openAddFoodButton = document.querySelector("#openAddFoodButton");
     elements.openAddFastButton = document.querySelector("#openAddFastButton");
     elements.settingsButton = document.querySelector("#settingsButton");
+    elements.achievementsButton = document.querySelector("#achievementsButton");
+    elements.achievementUnreadBadge = document.querySelector("#achievementUnreadBadge");
     elements.foodForm = document.querySelector("#foodForm");
     elements.foodName = document.querySelector("#foodName");
     elements.foodSuggestionList = document.querySelector("#foodSuggestionList");
@@ -78,6 +153,12 @@ function cacheElements() {
     elements.fastingGoalDisplay = document.querySelector("#fastingGoalDisplay");
     elements.fastingList = document.querySelector("#fastingList");
     elements.fastingEmptyState = document.querySelector("#fastingEmptyState");
+    elements.achievementsList = document.querySelector("#achievementsList");
+    elements.achievementsEmptyState = document.querySelector("#achievementsEmptyState");
+    elements.achievementToast = document.querySelector("#achievementToast");
+    elements.achievementToastIcon = document.querySelector("#achievementToastIcon");
+    elements.achievementToastTitle = document.querySelector("#achievementToastTitle");
+    elements.achievementToastMessage = document.querySelector("#achievementToastMessage");
 }
 
 function bindEvents() {
@@ -90,6 +171,7 @@ function bindEvents() {
         openModal("addFastModal");
     });
     elements.settingsButton.addEventListener("click", () => openModal("settingsModal"));
+    elements.achievementsButton.addEventListener("click", openAchievementsModal);
     elements.foodForm.addEventListener("submit", handleFoodSubmit);
     elements.foodName.addEventListener("input", updateFoodSuggestions);
     elements.foodName.addEventListener("focus", updateFoodSuggestions);
@@ -172,9 +254,11 @@ function handleFoodSubmit(event) {
 
     state.entries.push(entry);
     saveEntries();
+    const unlockedAchievements = evaluateAchievements("food", { entry });
     elements.foodForm.reset();
     closeModal("addFoodModal");
     render();
+    queueAchievementToasts(unlockedAchievements);
 }
 
 function handleFastingSubmit(event) {
@@ -201,9 +285,11 @@ function handleFastingSubmit(event) {
 
     state.fasts.push(fast);
     saveFasts();
+    const unlockedAchievements = evaluateAchievements("fast", { fast });
     elements.fastingForm.reset();
     closeModal("addFastModal");
     render();
+    queueAchievementToasts(unlockedAchievements);
 }
 
 function handleCalorieGoalSubmit(event) {
@@ -212,7 +298,9 @@ function handleCalorieGoalSubmit(event) {
     const formData = new FormData(elements.calorieGoalForm);
     state.settings.calorieGoalCalories = sanitizeCalorieGoal(formData.get("calorieGoalCalories"));
     saveSettings();
+    const unlockedAchievements = evaluateAchievements("calorie-goal");
     render();
+    queueAchievementToasts(unlockedAchievements);
 }
 
 function handleFastingGoalSubmit(event) {
@@ -221,7 +309,9 @@ function handleFastingGoalSubmit(event) {
     const formData = new FormData(elements.fastingGoalForm);
     state.settings.fastingGoalHours = sanitizeFastingGoal(formData.get("fastingGoalHours"));
     saveSettings();
+    const unlockedAchievements = evaluateAchievements("fasting-goal");
     render();
+    queueAchievementToasts(unlockedAchievements);
 }
 
 function deleteEntry(entryId) {
@@ -260,12 +350,13 @@ function clearAllData() {
     const hasCustomGoal =
         state.settings.fastingGoalHours !== DEFAULT_SETTINGS.fastingGoalHours ||
         state.settings.calorieGoalCalories !== DEFAULT_SETTINGS.calorieGoalCalories;
-    if (!state.entries.length && !state.fasts.length && !hasCustomGoal) {
+    const hasAchievements = state.achievements.length > 0;
+    if (!state.entries.length && !state.fasts.length && !hasCustomGoal && !hasAchievements) {
         closeModal("settingsModal");
         return;
     }
 
-    const shouldClear = window.confirm("Clear saved foods, fasting logs, and reset your goals?");
+    const shouldClear = window.confirm("Clear saved foods, fasting logs, achievements, and reset your goals?");
     if (!shouldClear) {
         return;
     }
@@ -273,9 +364,12 @@ function clearAllData() {
     state.entries = [];
     state.fasts = [];
     state.settings = { ...DEFAULT_SETTINGS };
+    state.achievements = [];
     saveEntries();
     saveFasts();
     saveSettings();
+    saveAchievements();
+    clearAchievementToasts();
     closeModal("settingsModal");
     render();
 }
@@ -315,6 +409,8 @@ function render() {
         .map(renderFastingItem)
         .join("");
 
+    renderAchievements();
+    updateAchievementBadge();
     drawCharts();
     refreshIcons();
 }
@@ -361,6 +457,224 @@ function renderFastingItem(fast) {
             </button>
         </li>
     `;
+}
+
+function openAchievementsModal() {
+    renderAchievements();
+    refreshIcons();
+    openModal("achievementsModal");
+    markAchievementsSeen();
+}
+
+function renderAchievements() {
+    if (!elements.achievementsList || !elements.achievementsEmptyState) {
+        return;
+    }
+
+    const achievements = getEarnedAchievementRecords();
+    elements.achievementsEmptyState.hidden = achievements.length > 0;
+    elements.achievementsList.hidden = achievements.length === 0;
+    elements.achievementsList.innerHTML = achievements.map(renderAchievementItem).join("");
+}
+
+function renderAchievementItem(achievement) {
+    const safeTitle = escapeHtml(achievement.title);
+    const safeMessage = escapeHtml(achievement.message);
+    const safeIcon = escapeHtml(achievement.icon);
+    const safeEarnedAt = escapeHtml(achievement.earnedAt);
+    const earnedLabel = escapeHtml(formatAchievementDateTime(achievement.earnedAt));
+
+    return `
+        <li class="achievement-card">
+            <div class="achievement-icon" aria-hidden="true">
+                <i data-lucide="${safeIcon}"></i>
+            </div>
+            <div class="achievement-copy">
+                <div class="achievement-title-row">
+                    <h3>${safeTitle}</h3>
+                    <time datetime="${safeEarnedAt}">${earnedLabel}</time>
+                </div>
+                <p>${safeMessage}</p>
+            </div>
+        </li>
+    `;
+}
+
+function evaluateAchievements(eventName, context = {}) {
+    const evaluationContext = { ...context, eventName };
+    const unlockedAchievements = [];
+
+    ACHIEVEMENTS.forEach((definition) => {
+        if (hasAchievement(definition.id) || !definition.events.includes(eventName)) {
+            return;
+        }
+
+        if (!definition.isUnlocked(evaluationContext)) {
+            return;
+        }
+
+        const record = {
+            id: definition.id,
+            earnedAt: new Date().toISOString(),
+            seenAt: null,
+        };
+        state.achievements.push(record);
+        unlockedAchievements.push({ ...definition, ...record });
+    });
+
+    if (unlockedAchievements.length > 0) {
+        saveAchievements();
+    }
+
+    return unlockedAchievements;
+}
+
+function markAchievementsSeen() {
+    const unseenAchievements = state.achievements.filter((achievement) => !achievement.seenAt);
+    if (!unseenAchievements.length) {
+        return;
+    }
+
+    const seenAt = new Date().toISOString();
+    unseenAchievements.forEach((achievement) => {
+        achievement.seenAt = seenAt;
+    });
+    saveAchievements();
+    updateAchievementBadge();
+}
+
+function updateAchievementBadge() {
+    if (!elements.achievementUnreadBadge || !elements.achievementsButton) {
+        return;
+    }
+
+    const unreadCount = getUnreadAchievementCount();
+    elements.achievementUnreadBadge.hidden = unreadCount === 0;
+    elements.achievementUnreadBadge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+    elements.achievementsButton.setAttribute(
+        "aria-label",
+        unreadCount > 0 ? `Open achievements, ${unreadCount} unread` : "Open achievements"
+    );
+}
+
+function queueAchievementToasts(achievements) {
+    if (!achievements.length || !elements.achievementToast) {
+        return;
+    }
+
+    achievementToastQueue.push(...achievements);
+    if (!achievementToastTimer && elements.achievementToast.hidden) {
+        showNextAchievementToast();
+    }
+}
+
+function showNextAchievementToast() {
+    if (
+        !elements.achievementToast ||
+        !elements.achievementToastIcon ||
+        !elements.achievementToastTitle ||
+        !elements.achievementToastMessage
+    ) {
+        achievementToastTimer = 0;
+        return;
+    }
+
+    const achievement = achievementToastQueue.shift();
+    if (!achievement) {
+        achievementToastTimer = 0;
+        elements.achievementToast.classList.remove("is-visible");
+        elements.achievementToast.hidden = true;
+        return;
+    }
+
+    elements.achievementToastIcon.innerHTML = `<i data-lucide="${escapeHtml(achievement.icon)}"></i>`;
+    elements.achievementToastTitle.textContent = achievement.title;
+    elements.achievementToastMessage.textContent = achievement.message;
+    elements.achievementToast.hidden = false;
+    window.requestAnimationFrame(() => {
+        elements.achievementToast.classList.add("is-visible");
+    });
+    refreshIcons();
+
+    achievementToastTimer = window.setTimeout(() => {
+        elements.achievementToast.classList.remove("is-visible");
+        achievementToastTimer = window.setTimeout(showNextAchievementToast, 220);
+    }, 3600);
+}
+
+function clearAchievementToasts() {
+    achievementToastQueue.length = 0;
+    window.clearTimeout(achievementToastTimer);
+    achievementToastTimer = 0;
+
+    if (elements.achievementToast) {
+        elements.achievementToast.classList.remove("is-visible");
+        elements.achievementToast.hidden = true;
+    }
+}
+
+function getEarnedAchievementRecords() {
+    const recordsById = new Map(state.achievements.map((achievement) => [achievement.id, achievement]));
+    return ACHIEVEMENTS.map((definition) => {
+        const record = recordsById.get(definition.id);
+        return record ? { ...definition, ...record } : null;
+    })
+        .filter(Boolean)
+        .sort((first, second) => new Date(second.earnedAt).getTime() - new Date(first.earnedAt).getTime());
+}
+
+function getAchievementDefinition(achievementId) {
+    return ACHIEVEMENTS.find((achievement) => achievement.id === achievementId) || null;
+}
+
+function hasAchievement(achievementId) {
+    return state.achievements.some((achievement) => achievement.id === achievementId);
+}
+
+function getUnreadAchievementCount() {
+    return state.achievements.filter((achievement) => !achievement.seenAt && getAchievementDefinition(achievement.id)).length;
+}
+
+function hasSmallWin() {
+    const goal = state.settings.calorieGoalCalories;
+    if (goal <= 0) {
+        return false;
+    }
+
+    const todayEntries = getEntriesForDate(getDateKey(new Date()));
+    return todayEntries.length > 0 && sumEntries(todayEntries).calories <= goal;
+}
+
+function hasFastingGoalHit() {
+    const goal = state.settings.fastingGoalHours;
+    return goal > 0 && state.fasts.some((fast) => getFastDurationHours(fast) >= goal);
+}
+
+function hasFoodLoggedAfterGap(entry) {
+    if (!entry || !entry.date) {
+        return false;
+    }
+
+    const previousDates = Array.from(
+        new Set(
+            state.entries
+                .filter((item) => item.id !== entry.id && item.date && item.date < entry.date)
+                .map((item) => item.date)
+        )
+    ).sort();
+    const previousDate = previousDates[previousDates.length - 1];
+
+    return Boolean(previousDate && getDateDifferenceDays(previousDate, entry.date) >= 3);
+}
+
+function getDateDifferenceDays(startDateKey, endDateKey) {
+    const start = dateFromKey(startDateKey);
+    const end = dateFromKey(endDateKey);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return 0;
+    }
+
+    return Math.round((end.getTime() - start.getTime()) / 86400000);
 }
 
 function updateFoodSuggestions() {
@@ -989,6 +1303,68 @@ function saveSettings() {
     }
 }
 
+function loadAchievements() {
+    try {
+        const rawAchievements = window.localStorage.getItem(ACHIEVEMENT_STORAGE_KEY);
+        if (!rawAchievements) {
+            return [];
+        }
+
+        const parsed = JSON.parse(rawAchievements);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        const seenIds = new Set();
+        return parsed
+            .map(normalizeAchievementRecord)
+            .filter(Boolean)
+            .filter((achievement) => {
+                if (seenIds.has(achievement.id)) {
+                    return false;
+                }
+
+                seenIds.add(achievement.id);
+                return true;
+            });
+    } catch (error) {
+        console.warn("Unable to load achievements.", error);
+        return [];
+    }
+}
+
+function saveAchievements() {
+    try {
+        window.localStorage.setItem(ACHIEVEMENT_STORAGE_KEY, JSON.stringify(state.achievements));
+    } catch (error) {
+        console.warn("Unable to save achievements.", error);
+    }
+}
+
+function normalizeAchievementRecord(record) {
+    if (!record || typeof record !== "object" || !isKnownAchievementId(record.id)) {
+        return null;
+    }
+
+    const earnedAt = new Date(record.earnedAt);
+    if (typeof record.earnedAt !== "string" || Number.isNaN(earnedAt.getTime())) {
+        return null;
+    }
+
+    const seenAtDate = new Date(record.seenAt);
+    const seenAt = typeof record.seenAt === "string" && !Number.isNaN(seenAtDate.getTime()) ? record.seenAt : null;
+
+    return {
+        id: record.id,
+        earnedAt: record.earnedAt,
+        seenAt,
+    };
+}
+
+function isKnownAchievementId(achievementId) {
+    return ACHIEVEMENTS.some((achievement) => achievement.id === achievementId);
+}
+
 function isValidEntry(entry) {
     return Boolean(
         entry &&
@@ -1071,6 +1447,21 @@ function formatShortDateTime(value) {
 
     return new Intl.DateTimeFormat(undefined, {
         weekday: "short",
+        hour: "numeric",
+        minute: "2-digit",
+    }).format(date);
+}
+
+function formatAchievementDateTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "Unknown time";
+    }
+
+    return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
         hour: "numeric",
         minute: "2-digit",
     }).format(date);

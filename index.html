@@ -19,13 +19,19 @@
 <body>
     <div class="app-shell">
         <header class="app-header">
-            <div>
+            <div class="header-title">
                 <p class="eyebrow" id="todayLabel">Today</p>
                 <h1>Simple Food Tracker</h1>
             </div>
-            <button class="icon-button" id="settingsButton" type="button" aria-label="Open settings">
-                <i data-lucide="settings" aria-hidden="true"></i>
-            </button>
+            <div class="header-actions">
+                <button class="icon-button notification-button" id="achievementsButton" type="button" aria-label="Open achievements">
+                    <i data-lucide="bell" aria-hidden="true"></i>
+                    <span class="unread-badge" id="achievementUnreadBadge" aria-hidden="true" hidden>0</span>
+                </button>
+                <button class="icon-button" id="settingsButton" type="button" aria-label="Open settings">
+                    <i data-lucide="settings" aria-hidden="true"></i>
+                </button>
+            </div>
         </header>
 
         <main class="app-main">
@@ -234,6 +240,27 @@
         </section>
     </div>
 
+    <div class="modal" id="achievementsModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="achievementsTitle">
+        <div class="modal-backdrop" data-close-modal="achievementsModal"></div>
+        <section class="sheet" role="document">
+            <div class="sheet-header">
+                <div>
+                    <p class="section-kicker">Milestones</p>
+                    <h2 id="achievementsTitle">Achievements</h2>
+                </div>
+                <button class="icon-button" type="button" aria-label="Close achievements" data-close-modal="achievementsModal">
+                    <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <div class="empty-state achievement-empty-state" id="achievementsEmptyState">
+                <i data-lucide="sparkles" aria-hidden="true"></i>
+                <p>No achievements yet. Log food, save a fast, or set a goal to start building momentum.</p>
+            </div>
+            <ul class="achievement-list" id="achievementsList" aria-label="Unlocked achievements"></ul>
+        </section>
+    </div>
+
     <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="settingsTitle">
         <div class="modal-backdrop" data-close-modal="settingsModal"></div>
         <section class="sheet" role="document">
@@ -274,7 +301,7 @@
                 <div class="settings-row">
                     <div>
                         <p>Version</p>
-                        <span id="versionNumber">1.2.3</span>
+                        <span id="versionNumber">1.3.0</span>
                     </div>
                     <i data-lucide="badge-check" aria-hidden="true"></i>
                 </div>
@@ -282,12 +309,22 @@
                 <button class="danger-row" id="clearDataButton" type="button">
                     <span>
                         <strong>Clear data</strong>
-                        <small>Remove saved foods, fasting logs, and reset your goals.</small>
+                        <small>Remove saved foods, fasting logs, achievements, and reset your goals.</small>
                     </span>
                     <i data-lucide="trash-2" aria-hidden="true"></i>
                 </button>
             </div>
         </section>
+    </div>
+    <div class="achievement-toast" id="achievementToast" role="status" aria-live="polite" aria-atomic="true" hidden>
+        <div class="achievement-toast-icon" id="achievementToastIcon" aria-hidden="true">
+            <i data-lucide="trophy"></i>
+        </div>
+        <div class="achievement-toast-copy">
+            <p>Achievement unlocked</p>
+            <strong id="achievementToastTitle">First Step</strong>
+            <span id="achievementToastMessage">You logged your first food.</span>
+        </div>
     </div>
 </body>
 </html>

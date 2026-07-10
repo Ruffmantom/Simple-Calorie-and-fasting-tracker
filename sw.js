@@ -1,9 +1,12 @@
-﻿const CACHE_NAME = "simple-food-tracker-v9";
+﻿const CACHE_NAME = "simple-food-tracker-v10";
 const APP_SHELL = [
     "./",
     "./index.html",
     "./styles/main.css",
     "./scripts/main.js",
+    "./scripts/variables.js",
+    "./scripts/helpers.js",
+    "./scripts/handlers.js",
     "./manifest.webmanifest",
     "./assets/icon.svg",
 ];
